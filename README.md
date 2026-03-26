@@ -2,6 +2,8 @@
 
 A lightweight, browser-native library for decoding and visualizing NEXRAD Level 3 radar products. Pure client-side processing with no dependencies.
 
+A public NEXRAD Level 3 viewer using this decoder is available here: https://zuranskiweather.com/tools/nexrad-l3-viewer/
+
 ## Overview
 
 This library parses binary NEXRAD Level 3 products and exposes:
