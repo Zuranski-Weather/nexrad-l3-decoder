@@ -28,13 +28,6 @@ As an npm package:
 npm install nexrad-l3-decoder
 ```
 
-Or include from a CDN (after publication):
-```html
-<script type="module">
-  import { decodeLevel3 } from 'https://cdn.example.com/nexrad-l3-decoder.js';
-</script>
-```
-
 ## Quick Start
 
 ### Basic Decoding
