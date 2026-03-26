@@ -1,0 +1,25 @@
+{
+  "name": "nexrad-l3-decoder",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/lib/nexrad-l3-decoder.js",
+  "module": "dist/lib/nexrad-l3-decoder.js",
+  "types": "dist/lib/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/lib/nexrad-l3-decoder.js",
+      "types": "./dist/lib/index.d.ts"
+    }
+  },
+  "files": ["dist/lib"],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:lib": "vite build --config vite.config.lib.ts && tsc -p tsconfig.lib.json",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.0",
+    "vite": "^6.0.0"
+  }
+}
