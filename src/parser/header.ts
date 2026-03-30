@@ -41,6 +41,14 @@ const FLOAT_THRESHOLD_PRODUCTS = new Set([
   189, 190, 191, 192,
 ]);
 
+// Hydrometeor classification products: gate codes ARE the category identifiers directly.
+// No scale/offset applies — codes 10, 20, 30 … 100 each map to a hydrometeor type.
+// Both products use bzip2-compressed symbology and packet code 16 (digital radial).
+const HC_CATEGORICAL_PRODUCTS = new Set([
+  165, // Digital Hydrometeor Classification (HCA / N0H / N1H / N2H / N3H)
+  177, // Hybrid Hydrometeor Classification (HHC)
+]);
+
 export function parseMessageHeader(reader: BinaryReader): MessageHeader {
   const messageCode = reader.readInt16();
   const dateOfMessage = reader.readUint16();
@@ -147,6 +155,22 @@ export function parseProductDescription(reader: BinaryReader): ProductDescriptio
 export function buildThresholdInfo(pd: ProductDescription): ThresholdInfo | undefined {
   const code = Math.abs(pd.productCode);
   const t = pd.dataLevelThresholds;
+
+  // Hydrometeor classification: gate codes are category IDs (10, 20, 30 … 100).
+  // No scale/offset encoding — return the code value directly.
+  if (HC_CATEGORICAL_PRODUCTS.has(code)) {
+    return {
+      type: 'generic',
+      minValue: 10,
+      increment: 10,
+      numLevels: 256,
+      unit: '',
+      codeToValue: (c: number) => {
+        if (c === 0 || c === 1) return null;
+        return c; // category code IS the value
+      },
+    };
+  }
 
   if (FLOAT_THRESHOLD_PRODUCTS.has(code)) {
     // Float32 Scale/Offset encoding: HW31-32 = Scale, HW33-34 = Offset

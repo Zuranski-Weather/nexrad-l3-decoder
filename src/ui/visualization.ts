@@ -52,6 +52,45 @@ const CC_TABLE: ReadonlyArray<readonly [number, number, number, number]> = [
 // CC product codes: 161 (Digital CC), 167 (Super Res CC), 190 (QVP CC)
 const CC_PRODUCTS = new Set([161, 167, 190]);
 
+// Hydrometeor classification product codes (categories, not physical values)
+const HC_PRODUCTS = new Set([165, 177]);
+
+// AWIPS-standard hydrometeor classification color table: code → [R, G, B]
+// Colors match the AWIPS HC product display (Characteristics of HC in AWIPS)
+// Categories per NEXRAD ICD: 10=BI, 20=GC, 30=IC, 40=DS, 50=WS, 60=RA, 70=HR, 80=BD, 90=GR, 100=HA
+const HC_TABLE: ReadonlyArray<readonly [number, number, number, number]> = [
+  [ 10,  64,  64,  64],  // BI  - Biological      (dark gray)
+  [ 20, 160, 160, 160],  // GC  - Ground Clutter  (light gray)
+  [ 30, 255, 160, 160],  // IC  - Ice Crystals     (light pink)
+  [ 40,   0, 236, 236],  // DS  - Dry Snow         (bright cyan)
+  [ 50,   0, 155, 200],  // WS  - Wet Snow         (darker blue-cyan)
+  [ 60, 120, 210, 120],  // RA  - Rain             (light green)
+  [ 70,   0, 110,   0],  // HR  - Heavy Rain       (forest green)
+  [ 80, 255, 220,   0],  // BD  - Big Drops        (yellow)
+  [ 90, 210,  80, 130],  // GR  - Graupel          (dark pink)
+  [100, 255,   0,   0],  // HA  - Hail             (red)
+];
+
+const HC_CATEGORY_NAMES: Record<number, string> = {
+   10: 'Biological (BI)',
+   20: 'Ground Clutter (GC)',
+   30: 'Ice Crystals (IC)',
+   40: 'Dry Snow (DS)',
+   50: 'Wet Snow (WS)',
+   60: 'Rain (RA)',
+   70: 'Heavy Rain (HR)',
+   80: 'Big Drops (BD)',
+   90: 'Graupel (GR)',
+  100: 'Hail (HA)',
+};
+
+function hcRgb(code: number): [number, number, number] | null {
+  for (const [c, r, g, b] of HC_TABLE) {
+    if (c === code) return [r, g, b];
+  }
+  return null;
+}
+
 // NWS-style velocity color table: [m/s threshold, R, G, B] (step function)
 // V-shaped diverging palette: bright green (strong inbound) → dim → gray (zero) → dim → bright red (strong outbound)
 const VEL_TABLE: ReadonlyArray<readonly [number, number, number, number]> = [
@@ -106,9 +145,10 @@ function buildColorLookup(product: Level3Product): Uint32Array {
   const table = new Uint32Array(256);
   const isCC = CC_PRODUCTS.has(product.productCode);
   const isVel = VEL_PRODUCTS.has(product.productCode);
+  const isHC = HC_PRODUCTS.has(product.productCode);
   let minV = Infinity, maxV = -Infinity;
 
-  if (product.unit !== 'dBZ' && !isCC && !isVel) {
+  if (product.unit !== 'dBZ' && !isCC && !isVel && !isHC) {
     for (let c = 2; c < 256; c++) {
       const v = product.gateValue(c);
       if (v !== null) { if (v < minV) minV = v; if (v > maxV) maxV = v; }
@@ -119,7 +159,9 @@ function buildColorLookup(product: Level3Product): Uint32Array {
     const v = product.gateValue(c);
     if (v === null) continue;
     let rgb: [number, number, number] | null;
-    if (product.unit === 'dBZ') {
+    if (isHC) {
+      rgb = hcRgb(c); // use raw code for category lookup, not scaled value
+    } else if (product.unit === 'dBZ') {
       rgb = reflRgb(v);
     } else if (isVel) {
       rgb = velRgb(v);
@@ -385,6 +427,23 @@ function buildLegend(el: HTMLElement, product: Level3Product) {
     return;
   }
 
+  if (HC_PRODUCTS.has(product.productCode)) {
+    const strips = HC_TABLE.map(([code, r, g, b]) => {
+      const name = HC_CATEGORY_NAMES[code] ?? `Category ${code}`;
+      return `<div class="viz-leg-seg" style="background:rgb(${r},${g},${b});flex:1" title="${name}"></div>`;
+    }).join('');
+    const labels = HC_TABLE.map(([code]) => {
+      const abbr = (HC_CATEGORY_NAMES[code] ?? '').match(/\((\w+)\)/)?.[1] ?? String(code);
+      return `<span>${abbr}</span>`;
+    }).join('');
+    el.innerHTML = `
+      <div class="viz-legend-title">Hydrometeor Class</div>
+      <div class="viz-leg-bar">${strips}</div>
+      <div class="viz-leg-labels">${labels}</div>
+    `;
+    return;
+  }
+
   if (CC_PRODUCTS.has(product.productCode)) {
     // Cap legend display at 103% to give the ≥100% strip a reasonable width
     const CAP = 103;
@@ -573,7 +632,9 @@ export function renderVisualization(product: Level3Product): HTMLElement {
       : code === 1
       ? '<em>Range folded</em>'
       : value !== null
-      ? CC_PRODUCTS.has(product.productCode)
+      ? HC_PRODUCTS.has(product.productCode)
+        ? `<strong>${HC_CATEGORY_NAMES[value] ?? `Category ${value}`}</strong>`
+        : CC_PRODUCTS.has(product.productCode)
         ? `<strong>${(value * 100).toFixed(1)}</strong> %`
         : `<strong>${value.toFixed(1)}</strong> ${product.unit}`
       : 'N/A';

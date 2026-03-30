@@ -9,6 +9,8 @@
 const SUPER_RES_PRODUCTS = new Set([
   // Super-res reflectivity/width/dual-pol (0.25 km)
   153, 154, 155, 159, 161, 163, 165, 167, 168,
+  // Hydrometeor classification (0.25 km)
+  177,
   // Digital velocity array products (Build 14+): 0.25 km gates, 300 km range
   98, 99,
 ]);
