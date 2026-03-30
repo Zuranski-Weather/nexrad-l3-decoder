@@ -12,13 +12,13 @@ const REFL_TABLE: ReadonlyArray<readonly [number, number, number, number]> = [
   [ 25,   1, 197,   1],
   [ 30,   0, 142,   0],
   [ 35, 253, 248,   2],
-  [ 40, 229, 188,   0],
-  [ 45, 253, 149,   0],
-  [ 50, 253,   0,   0],
-  [ 55, 212,   0,   0],
-  [ 60, 188,   0,   0],
-  [ 65, 248,   0, 253],
-  [ 70, 152,  84, 198],
+  [ 40, 255, 165,   0],  // orange
+  [ 45, 255, 140,   0],  // dark orange
+  [ 50, 255,  60,  60],  // bright red
+  [ 55, 200,   0,   0],  // deep red
+  [ 60, 150,   0,   0],  // darker red
+  [ 65, 180,   0, 120],  // red-magenta
+  [ 70, 140,  40, 160],  // purple-magenta
   [ 75, 253, 253, 253],
 ];
 
@@ -54,6 +54,37 @@ const CC_PRODUCTS = new Set([161, 167, 190]);
 
 // Hydrometeor classification product codes (categories, not physical values)
 const HC_PRODUCTS = new Set([165, 177]);
+
+// VIL (Vertically Integrated Liquid) product codes
+const VIL_PRODUCTS = new Set([57, 134]);
+
+// NWS-style VIL color table: [kg/m² threshold, R, G, B] (step function)
+// Matches standard AWIPS VIL display (0–80 kg/m² range)
+const VIL_TABLE: ReadonlyArray<readonly [number, number, number, number]> = [
+  [  0, 100, 100, 100],  // light gray
+  [  1,   4, 233, 231],  // cyan
+  [  3,   1, 159, 244],  // light blue
+  [  5,   3,   0, 244],  // blue
+  [  8,   2, 253,   2],  // bright green
+  [ 10,   1, 197,   1],  // green
+  [ 15,   0, 142,   0],  // dark green
+  [ 20, 253, 248,   2],  // yellow
+  [ 25, 229, 188,   0],  // gold
+  [ 30, 253, 149,   0],  // orange
+  [ 40, 255,  60,  60],  // bright red
+  [ 50, 200,   0,   0],  // deep red
+  [ 60, 160,   0,   0],  // darker red
+  [ 70, 220,   0, 160],  // red-magenta
+  [ 80, 253, 253, 253],  // white
+];
+
+function vilRgb(kgm2: number): [number, number, number] | null {
+  if (kgm2 < VIL_TABLE[0][0]) return null;
+  for (let i = VIL_TABLE.length - 1; i >= 0; i--) {
+    if (kgm2 >= VIL_TABLE[i][0]) return [VIL_TABLE[i][1], VIL_TABLE[i][2], VIL_TABLE[i][3]];
+  }
+  return null;
+}
 
 // AWIPS-standard hydrometeor classification color table: code → [R, G, B]
 // Colors match the AWIPS HC product display (Characteristics of HC in AWIPS)
@@ -146,9 +177,10 @@ function buildColorLookup(product: Level3Product): Uint32Array {
   const isCC = CC_PRODUCTS.has(product.productCode);
   const isVel = VEL_PRODUCTS.has(product.productCode);
   const isHC = HC_PRODUCTS.has(product.productCode);
+  const isVIL = VIL_PRODUCTS.has(product.productCode);
   let minV = Infinity, maxV = -Infinity;
 
-  if (product.unit !== 'dBZ' && !isCC && !isVel && !isHC) {
+  if (product.unit !== 'dBZ' && !isCC && !isVel && !isHC && !isVIL) {
     for (let c = 2; c < 256; c++) {
       const v = product.gateValue(c);
       if (v !== null) { if (v < minV) minV = v; if (v > maxV) maxV = v; }
@@ -161,6 +193,8 @@ function buildColorLookup(product: Level3Product): Uint32Array {
     let rgb: [number, number, number] | null;
     if (isHC) {
       rgb = hcRgb(c); // use raw code for category lookup, not scaled value
+    } else if (isVIL) {
+      rgb = vilRgb(v);
     } else if (product.unit === 'dBZ') {
       rgb = reflRgb(v);
     } else if (isVel) {
@@ -438,6 +472,25 @@ function buildLegend(el: HTMLElement, product: Level3Product) {
     }).join('');
     el.innerHTML = `
       <div class="viz-legend-title">Hydrometeor Class</div>
+      <div class="viz-leg-bar">${strips}</div>
+      <div class="viz-leg-labels">${labels}</div>
+    `;
+    return;
+  }
+
+  if (VIL_PRODUCTS.has(product.productCode)) {
+    const strips = VIL_TABLE.map(([kgm2, r, g, b], i) => {
+      const next = i + 1 < VIL_TABLE.length ? VIL_TABLE[i + 1][0] : 90;
+      return `<div class="viz-leg-seg" style="background:rgb(${r},${g},${b});flex:${next - kgm2}" title="${kgm2} to ${next} kg/m²"></div>`;
+    }).join('');
+
+    const labels = VIL_TABLE
+      .filter((_, i) => i % 2 === 0)
+      .map(([kgm2]) => `<span>${kgm2}</span>`)
+      .join('');
+
+    el.innerHTML = `
+      <div class="viz-legend-title">kg/m²</div>
       <div class="viz-leg-bar">${strips}</div>
       <div class="viz-leg-labels">${labels}</div>
     `;

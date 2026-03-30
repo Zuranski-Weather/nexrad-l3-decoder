@@ -10,6 +10,21 @@ function halfwordsToFloat(msw: number, lsw: number): number {
   return view.getFloat32(0, false);
 }
 
+/**
+ * Decode a 16-bit modified IEEE float used by DVL/EET products (ICD §3.3.4 Figure 3-6 Note 1).
+ * Layout: S(1) E(5) F(10)
+ *   E = 0:  value = (-1)^S × 2 × (F / 1024)
+ *   E > 0:  value = (-1)^S × 2^(E-16) × (1 + F / 1024)
+ */
+function decode16BitFloat(hw: number): number {
+  const u = hw & 0xFFFF;
+  const S = (u >> 15) & 1;
+  const E = (u >> 10) & 0x1F;
+  const F = u & 0x3FF;
+  if (E === 0) return (S ? -1 : 1) * 2 * (F / 1024);
+  return (S ? -1 : 1) * (2 ** (E - 16)) * (1 + F / 1024);
+}
+
 const OP_MODES: Record<number, string> = {
   0: 'Maintenance',
   1: 'Clear Air',
@@ -24,7 +39,7 @@ const DIGITAL_THRESHOLD_PRODUCTS = new Set([
   19, 20, 27, 30, 32, 41, 43, 44, 45, 46, 50, 51, 57,
   78, 79, 80, 81, 86, 87, 90, 94, 97, 98, 99,
   // Digital products (134+) — int16 min/inc/nLevels encoding
-  134, 135, 138, 153, 154, 155, 193, 195,
+  135, 138, 153, 154, 155, 193, 195,
   // TDWR products — int16 encoding
   180, 182, 186,
 ]);
@@ -48,6 +63,13 @@ const HC_CATEGORICAL_PRODUCTS = new Set([
   165, // Digital Hydrometeor Classification (HCA / N0H / N1H / N2H / N3H)
   177, // Hybrid Hydrometeor Classification (HHC)
 ]);
+
+// Product 134 (DVL) uses a custom piecewise linear/log encoding with 16-bit float coefficients.
+// Coefficients are stored in HW31-35 using a modified 16-bit IEEE float format:
+//   S(1 bit) E(5 bits) F(10 bits)
+//   E=0: value = (-1)^S * 2 * (F/1024)
+//   E>0: value = (-1)^S * 2^(E-16) * (1 + F/1024)
+const DVL_PRODUCT = 134;
 
 export function parseMessageHeader(reader: BinaryReader): MessageHeader {
   const messageCode = reader.readInt16();
@@ -172,6 +194,36 @@ export function buildThresholdInfo(pd: ProductDescription): ThresholdInfo | unde
     };
   }
 
+  // DVL (product 134): piecewise linear/log encoding per ICD §3.3.4.
+  // HW31-32 encode linear scale/offset as 16-bit floats, HW33 is the log start code,
+  // HW34-35 encode log scale/offset. For codes < HW33: VIL = (code - linOffset) / linScale.
+  // For codes >= HW33: VIL = exp((code - logOffset) / logScale).
+  if (code === DVL_PRODUCT) {
+    const linScale = decode16BitFloat(t[0]);   // HW31
+    const linOffset = decode16BitFloat(t[1]);   // HW32
+    const logStart = t[2];                      // HW33 (plain int, not float-encoded)
+    const logScale = decode16BitFloat(t[3]);    // HW34
+    const logOffset = decode16BitFloat(t[4]);   // HW35
+    const unit = getUnitForProduct(code);
+
+    return {
+      type: 'generic',
+      minValue: 0,
+      increment: 0,
+      numLevels: 256,
+      unit,
+      codeToValue: (c: number) => {
+        if (c === 0 || c === 1 || c === 255) return null; // below threshold / flagged / reserved
+        if (c < logStart) {
+          // Linear region
+          return linScale !== 0 ? (c - linOffset) / linScale : null;
+        }
+        // Log region
+        return logScale !== 0 ? Math.exp((c - logOffset) / logScale) : null;
+      },
+    };
+  }
+
   if (FLOAT_THRESHOLD_PRODUCTS.has(code)) {
     // Float32 Scale/Offset encoding: HW31-32 = Scale, HW33-34 = Offset
     // Each pair of int16 halfwords forms an IEEE 754 float32
@@ -272,7 +324,7 @@ function decodeLegacyThreshold(hw: number): number | null {
 
 function getUnitForProduct(code: number): string {
   // Reflectivity products (WSR-88D and TDWR)
-  if ([19, 20, 32, 37, 38, 86, 87, 90, 94, 97, 134, 137, 153, 180, 185, 186, 189, 193, 195].includes(code)) return 'dBZ';
+  if ([19, 20, 32, 37, 38, 86, 87, 90, 94, 97, 137, 153, 180, 185, 186, 189, 193, 195].includes(code)) return 'dBZ';
   // Velocity products (WSR-88D and TDWR)
   if ([27, 43, 44, 50, 51, 98, 99, 154, 181, 182, 183, 190].includes(code)) return 'm/s';
   // Storm-relative velocity (legacy 16-level, values in knots)
@@ -280,7 +332,7 @@ function getUnitForProduct(code: number): string {
   // Spectrum width
   if ([28, 30, 155, 191].includes(code)) return 'm/s';
   // VIL
-  if ([57].includes(code)) return 'kg/m²';
+  if ([57, 134].includes(code)) return 'kg/m²';
   // Echo tops
   if ([41, 135].includes(code)) return 'kft';
   // Precipitation / accumulation

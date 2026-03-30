@@ -26,9 +26,15 @@ const TDWR_LONG_RANGE_PRODUCTS = new Set([
   181, 183, 186,
 ]);
 
+// Half-km products: 0.50 km gate spacing
+const HALF_KM_PRODUCTS = new Set([
+  134, // Digital VIL (DVL): 460 bins × 0.5 km = 230 km range
+]);
+
 export function getGateResolutionKm(productCode: number): number {
   const code = Math.abs(productCode);
   if (SUPER_RES_PRODUCTS.has(code)) return 0.25;
+  if (HALF_KM_PRODUCTS.has(code)) return 0.50;
   if (TDWR_PRODUCTS.has(code)) return 0.15;
   if (TDWR_LONG_RANGE_PRODUCTS.has(code)) return 0.30;
   return 1.0;
