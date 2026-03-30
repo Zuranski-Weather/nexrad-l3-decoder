@@ -2,7 +2,8 @@
  * NEXRAD Level 3 gate spacing lookup.
  *
  * Super-resolution products use 250m (0.25 km) gate spacing.
- * TDWR products use 150m (0.15 km) gate spacing.
+ * TDWR short-range products use 150m (0.15 km) gate spacing.
+ * TDWR long-range products (181, 183, 186) use 300m (0.30 km) gate spacing.
  * All other digital radial products use 1000m (1.0 km) spacing.
  */
 const SUPER_RES_PRODUCTS = new Set([
@@ -12,13 +13,21 @@ const SUPER_RES_PRODUCTS = new Set([
   98, 99,
 ]);
 
+// TDWR short-range products: 0.15 km gate spacing
 const TDWR_PRODUCTS = new Set([
-  180, 181, 182, 183, 185, 186, 187,
+  180, 182, 185, 187,
+]);
+
+// TDWR long-range products: 0.30 km gate spacing
+// 181 = Long-Range Reflectivity, 183 = Long-Range Velocity, 186 = TZL (Long-Range Refl Super Res)
+const TDWR_LONG_RANGE_PRODUCTS = new Set([
+  181, 183, 186,
 ]);
 
 export function getGateResolutionKm(productCode: number): number {
   const code = Math.abs(productCode);
   if (SUPER_RES_PRODUCTS.has(code)) return 0.25;
   if (TDWR_PRODUCTS.has(code)) return 0.15;
+  if (TDWR_LONG_RANGE_PRODUCTS.has(code)) return 0.30;
   return 1.0;
 }
