@@ -1,4 +1,4 @@
-import type { NexradProduct } from '../types';
+import type { NexradProduct, RadialPacket } from '../types';
 import { PRODUCT_NAMES } from '../parser/header';
 
 export function renderSummary(product: NexradProduct): HTMLElement {
@@ -34,11 +34,14 @@ export function renderSummary(product: NexradProduct): HTMLElement {
 
   // Radial info
   let radialInfo = '';
+  let scaleFactorInfo = '';
   if (sym) {
     for (const layer of sym.layers) {
       for (const pkt of layer.packets) {
         if (pkt.packetCode === 16 && 'radials' in pkt) {
-          radialInfo = `${pkt.numberOfRadials} radials, ${pkt.numberOfRangeBins} bins/radial`;
+          const rp = pkt as RadialPacket;
+          radialInfo = `${rp.numberOfRadials} radials, ${rp.numberOfRangeBins} bins/radial`;
+          scaleFactorInfo = `${rp.scaleFactor}`;
           break;
         }
       }
@@ -83,6 +86,7 @@ export function renderSummary(product: NexradProduct): HTMLElement {
           <dt>Elevation</dt><dd>#${pd.elevationNumber} (${elevAngle.toFixed(1)}&deg;)</dd>
           <dt>Packet Types</dt><dd>${packetTypes.join(', ') || 'None'}</dd>
           <dt>Radials</dt><dd>${radialInfo || 'N/A'}</dd>
+          ${scaleFactorInfo ? `<dt>Scale Factor</dt><dd>${scaleFactorInfo}</dd>` : ''}
           <dt>Layers</dt><dd>${sym?.numberOfLayers ?? 0}</dd>
           ${sym?.compressed ? `
           <dt>Compression</dt><dd>bzip2 (${formatBytes(sym.compressedSize!)} &rarr; ${formatBytes(sym.uncompressedSize!)})</dd>

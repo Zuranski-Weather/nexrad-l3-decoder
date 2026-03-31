@@ -259,7 +259,7 @@ function renderPacketDetail(pkt: any, index: number, product: NexradProduct): HT
         ['Number of Range Bins', `${rp.numberOfRangeBins}`],
         ['I Center', `${rp.iCenter}`],
         ['J Center', `${rp.jCenter}`],
-        ['Scale Factor', `${rp.scaleFactor} (${(rp.scaleFactor / 1000).toFixed(3)})`],
+        ['Scale Factor', `${rp.scaleFactor}`],
         ['Number of Radials', `${rp.numberOfRadials}`],
       ]));
 

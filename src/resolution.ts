@@ -1,10 +1,17 @@
 /**
- * NEXRAD Level 3 gate spacing lookup.
+ * NEXRAD Level 3 gate/pixel spacing lookup.
+ *
+ * For radial products this is the physical gate bin size in km.
+ * For raster products this is the physical pixel cell size in km
+ * (the raster packet xScaleInt field is a PUP display zoom factor — not km — and is ignored).
  *
  * Super-resolution products use 250m (0.25 km) gate spacing.
  * TDWR short-range products use 150m (0.15 km) gate spacing.
  * TDWR long-range products (181, 183, 186) use 300m (0.30 km) gate spacing.
- * All other digital radial products use 1000m (1.0 km) spacing.
+ * Composite Reflectivity Extended (38) raster uses 4.0 km/pixel (248 Nmi radius).
+ * Some accumulation products (e.g. OHA/169) use 2000m (2.0 km) gate spacing.
+ * Composite Reflectivity Short Range (37) raster uses 1.0 km/pixel (124 Nmi radius, ~460×460 grid).
+ * All other products use 1000m (1.0 km) spacing.
  */
 const SUPER_RES_PRODUCTS = new Set([
   // Super-res reflectivity/width/dual-pol (0.25 km)
@@ -26,15 +33,25 @@ const TDWR_LONG_RANGE_PRODUCTS = new Set([
   181, 183, 186,
 ]);
 
-// Half-km products: 0.50 km gate spacing
-const HALF_KM_PRODUCTS = new Set([
-  134, // Digital VIL (DVL): 460 bins × 0.5 km = 230 km range
+// 2 km pixel/gate spacing products
+// 169 = One-Hour Accumulation (OHA): 115 bins × 2.0 km = 230 km range
+const TWO_KM_PRODUCTS = new Set([
+  169,
+]);
+
+// 4 km pixel spacing raster products
+// 38 = Composite Reflectivity Extended Range (248 Nmi): 232 cells × ~4 km = ~460 km radius
+// NOTE: the raster packet xScaleInt field is a PUP display zoom factor (screen px per cell),
+// NOT a physical km/cell value — all raster resolutions come from this table.
+const FOUR_KM_PRODUCTS = new Set([
+  38,
 ]);
 
 export function getGateResolutionKm(productCode: number): number {
   const code = Math.abs(productCode);
   if (SUPER_RES_PRODUCTS.has(code)) return 0.25;
-  if (HALF_KM_PRODUCTS.has(code)) return 0.50;
+  if (FOUR_KM_PRODUCTS.has(code)) return 4.0;
+  if (TWO_KM_PRODUCTS.has(code)) return 2.0;
   if (TDWR_PRODUCTS.has(code)) return 0.15;
   if (TDWR_LONG_RANGE_PRODUCTS.has(code)) return 0.30;
   return 1.0;

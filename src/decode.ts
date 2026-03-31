@@ -42,7 +42,7 @@ export async function decodeLevel3(
 }
 
 /** Expand the 4-bit RLE rows of a raster packet into a flat row-major Uint8Array grid. */
-function buildRasterGrid(pkt: RasterPacket): RasterData {
+function buildRasterGrid(pkt: RasterPacket, kmPerPixel: number): RasterData {
   const numRows = pkt.numberOfRows;
 
   // Determine column count from the widest decoded row
@@ -53,8 +53,8 @@ function buildRasterGrid(pkt: RasterPacket): RasterData {
     if (c > numCols) numCols = c;
   }
 
-  const kmPerPixelX = pkt.xScaleInt + pkt.xScaleFrac / 65536;
-  const kmPerPixelY = pkt.yScaleInt + pkt.yScaleFrac / 65536;
+  const kmPerPixelX = kmPerPixel;
+  const kmPerPixelY = kmPerPixel;
 
   const grid = new Uint8Array(numRows * numCols);
   for (let r = 0; r < numRows; r++) {
@@ -135,23 +135,26 @@ function buildLevel3Product(raw: NexradProduct): Level3Product {
     });
   }
 
+  // Gate resolution: authoritative table-based lookup.
+  // For radial products: km per gate bin. For raster products: km per pixel cell.
+  // The raster packet xScaleInt field is a PUP display zoom factor (screen pixels per cell),
+  // NOT a physical km/cell value — getGateResolutionKm() is the only accurate source.
+  const gateResolutionKm = getGateResolutionKm(productCode);
+  const firstGateRangeKm = firstGateIndex * gateResolutionKm;
+
   // Find raster packet (0xBA07/0xBA0F) when no radial data is present (e.g. products 37, 38)
   let rasterData: RasterData | undefined;
   if (!radials && raw.symbology) {
     for (const layer of raw.symbology.layers) {
       for (const pkt of layer.packets) {
         if ((pkt.packetCode === 0xba07 || pkt.packetCode === 0xba0f) && 'rows' in pkt) {
-          rasterData = buildRasterGrid(pkt as RasterPacket);
+          rasterData = buildRasterGrid(pkt as RasterPacket, gateResolutionKm);
           break;
         }
       }
       if (rasterData) break;
     }
   }
-
-  // Gate resolution + first gate range
-  const gateResolutionKm = getGateResolutionKm(productCode);
-  const firstGateRangeKm = firstGateIndex * gateResolutionKm;
 
   // Elevation from p3 (scaled by 10)
   const elevationAngle = pd.p3 / 10;
